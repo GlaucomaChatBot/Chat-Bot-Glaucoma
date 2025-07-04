@@ -1,0 +1,12 @@
+# Visual Studio system files
+.vs/
+*.user
+*.suo
+
+# Build artifacts
+bin/
+obj/
+
+# Python cache
+__pycache__/
+*.pyc
