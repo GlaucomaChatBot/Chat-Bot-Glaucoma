@@ -1,13 +1,13 @@
-from telegram.ext import ApplicationBuilder, CommandHandler # для формирования бота в принципе
-from dotenv import load_dotenv # для загрузки токена
+п»їfrom telegram.ext import ApplicationBuilder, CommandHandler # РґР»СЏ С„РѕСЂРјРёСЂРѕРІР°РЅРёСЏ Р±РѕС‚Р° РІ РїСЂРёРЅС†РёРїРµ
+from dotenv import load_dotenv # РґР»СЏ Р·Р°РіСЂСѓР·РєРё С‚РѕРєРµРЅР°
 import os
 
-# импорт обработчиков
-from handlers.start_handler import start # обработка старта
-from handlers.faq_handler import question_handler # обработка кнопки вопросы
-from handlers.medicine_handler import add_medicine # обработка кнопки добавления лекарства
+# РёРјРїРѕСЂС‚ РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ
+from handlers.start import start # РѕР±СЂР°Р±РѕС‚РєР° СЃС‚Р°СЂС‚Р°
+# from handlers.question import question # РѕР±СЂР°Р±РѕС‚РєР° РєРЅРѕРїРєРё РІРѕРїСЂРѕСЃС‹ (РµС‰Рµ РЅРµ СЂРµР°Р»РёР·РѕРІР°РЅРѕ, РїРѕС‚РѕРј СЃРґРµР»Р°СЋ)
+# from handlers.medicine import add # РѕР±СЂР°Р±РѕС‚РєР° РєРЅРѕРїРєРё РґРѕР±Р°РІР»РµРЅРёСЏ Р»РµРєР°СЂСЃС‚РІР° (РµС‰Рµ РЅРµ СЂРµР°Р»РёР·РѕРІР°РЅРѕ, РїРѕС‚РѕРј СЃРґРµР»Р°СЋ)
 
-# Загрузка .env
+# Р—Р°РіСЂСѓР·РєР° .env
 load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -15,13 +15,14 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    # Обработчики команд
+    # РћР±СЂР°Р±РѕС‚С‡РёРєРё РєРѕРјР°РЅРґ
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("faq", question_handler))
-    app.add_handler(CommandHandler("add", add_medicine))
+    # app.add_handler(CommandHandler("question", question))
+    # app.add_handler(CommandHandler("add", add_medicine))
 
-    print("Бот запущен!") # просто для проверки, уберем потом
-    app.run_polling()
+    print("Р‘РѕС‚ Р·Р°РїСѓС‰РµРЅ!") # РїСЂРѕСЃС‚Рѕ РґР»СЏ РїСЂРѕРІРµСЂРєРё, СѓР±РµСЂРµРј РїРѕС‚РѕРј
+
+    app.run_polling() # в†ђ РћР¶РёРґР°РµС‚ Р·Р°РІРµСЂС€РµРЅРёСЏ (ctrl+C)
 
 if __name__ == "__main__":
     main()
