@@ -1,29 +1,19 @@
-﻿from telegram.ext import ApplicationBuilder, CommandHandler # для формирования бота в принципе
-from dotenv import load_dotenv # для загрузки токена
-import os
+﻿import asyncio
 
-# импорт обработчиков
-from handlers.start import start # обработка старта
-# from handlers.question import question # обработка кнопки вопросы (еще не реализовано, потом сделаю)
-# from handlers.medicine import add # обработка кнопки добавления лекарства (еще не реализовано, потом сделаю)
+from instance import bot, dp, main_router
 
-# Загрузка .env
-load_dotenv()
+# импорты файлов с хендлерами
+import handlers.start # тут будут обработчики через запятую по мере разработки
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+async def main() -> None:
 
-def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    # рег главного роутера
+    dp.include_router(main_router)
 
-    # Обработчики команд
-    app.add_handler(CommandHandler("start", start))
-    # app.add_handler(CommandHandler("question", question))
-    # app.add_handler(CommandHandler("add", add_medicine))
+    print("Bot is run!") # сообщение что бот запустился
 
-    print("Бот запущен!") # просто для проверки, уберем потом
-
-    app.run_polling() # ← Ожидает завершения (ctrl+C)
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
 

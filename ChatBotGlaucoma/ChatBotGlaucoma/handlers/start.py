@@ -1,10 +1,12 @@
-﻿from telegram import Update
-from telegram.ext import ContextTypes
-from keyboards.reply import main_menu_keyboard
+﻿from aiogram.types import Message
+from aiogram import F
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = (
-        "Привет! Я бот, который поможет тебе не забыть принять лекарства и ответит на важные вопросы.\n\n"
-        "Выбери действие ниже:"
-    )
-    await update.message.reply_text(welcome_text, reply_markup=main_menu_keyboard())
+from instance import main_router  # импорт главного роутера
+from keyboards import reply       # импорт клавы
+
+# подвязка хендлера к главному роутеру
+
+@main_router.message(F.text == "/start") # слово запускающее бота
+
+async def func(message: Message):
+    await message.answer(text="тут приветственное сообщение",reply_markup=await reply.main_menu_keyboard())
