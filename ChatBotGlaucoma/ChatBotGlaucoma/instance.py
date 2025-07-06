@@ -19,3 +19,5 @@ dp = Dispatcher()
 main_router = Router()
 
 # тут бд
+
+#db = ClassName(db_file="ПУТЬ К ФАЙЛУ БД") путь к .db файлу (он должен быть не в проекте, гитом не отслеживается)

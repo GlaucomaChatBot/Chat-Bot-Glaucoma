@@ -21,6 +21,3 @@ class ClassName(DataBase):
             pass
             # Запросы CRUD к БД SQLite
             # self.cursor.execute("ЗАПРОС",(АРГУМЕНТЫ,))
-
-
-#db = ClassName(db_file="ПУТЬ К ФАЙЛУ БД") храним мы бинарный файл базы данных
