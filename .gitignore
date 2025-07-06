@@ -13,3 +13,6 @@ __pycache__/
 
 # tg protected token
 ChatBotGlaucoma/ChatBotGlaucoma/*.env
+
+# database
+ChatBotGlaucoma/ChatBotGlaucoma/database/glaucoma.db
