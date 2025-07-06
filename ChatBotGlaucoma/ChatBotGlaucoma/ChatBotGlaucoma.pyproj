@@ -21,12 +21,14 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="database\db_requests.py" />
     <Compile Include="handlers\start.py" />
     <Compile Include="instance.py" />
     <Compile Include="keyboards\reply.py" />
     <Compile Include="main.py" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="database\" />
     <Folder Include="handlers\" />
     <Folder Include="keyboards\" />
   </ItemGroup>
