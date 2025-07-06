@@ -1,10 +1,11 @@
-﻿from telegram import ReplyKeyboardMarkup, KeyboardButton
+﻿# кнопки с функциями (изменить на инлайны)
 
-def main_menu_keyboard():
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
+async def main_menu_keyboard():
     keyboard = [
-        [KeyboardButton("Добавить лекарство для отслеживания и напоминаний")],
-        [KeyboardButton("Ответить на интересующие вопросы")]
+        [KeyboardButton(text="Добавить лекарство для отслеживания и напоминаний")],
+        [KeyboardButton(text="Ответить на интересующие вопросы")]
     ]
 
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
