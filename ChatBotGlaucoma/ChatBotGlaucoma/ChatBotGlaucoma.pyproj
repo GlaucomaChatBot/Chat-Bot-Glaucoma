@@ -23,8 +23,11 @@
   <ItemGroup>
     <Compile Include="database\db_requests.py" />
     <Compile Include="handlers\start.py" />
+    <Compile Include="handlers\notifications.py" />
+    <Compile Include="handlers\scheduler.py" />
     <Compile Include="instance.py" />
     <Compile Include="keyboards\reply.py" />
+    <Compile Include="keyboards\inline.py" />
     <Compile Include="main.py" />
   </ItemGroup>
   <ItemGroup>

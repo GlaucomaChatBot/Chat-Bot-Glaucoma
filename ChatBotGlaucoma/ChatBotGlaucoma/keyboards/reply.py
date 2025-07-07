@@ -1,11 +1,29 @@
-﻿# кнопки с функциями (изменить на инлайны)
+﻿from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+async def role_selection_keyboard() -> ReplyKeyboardMarkup:
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Я врач"), KeyboardButton(text="Я пациент")]
+        ],
+        resize_keyboard=True
+    )
+    return keyboard
 
-async def main_menu_keyboard():
-    keyboard = [
-        [KeyboardButton(text="Добавить лекарство для отслеживания и напоминаний")],
-        [KeyboardButton(text="Ответить на интересующие вопросы")]
-    ]
+async def main_menu_keyboard() -> ReplyKeyboardMarkup:
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Мои лекарства")],
+            [KeyboardButton(text="Добавить лекарство")],
+            [KeyboardButton(text="История приёмов")],
+            [KeyboardButton(text="Выбрать своего врача")]
+        ],
+        resize_keyboard=True
+    )
+    return keyboard
 
-    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+async def cancel_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Отмена")]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
