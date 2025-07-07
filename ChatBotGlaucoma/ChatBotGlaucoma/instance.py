@@ -1,23 +1,47 @@
-# ФАЙЛ-КОНСТРУКТОР БОТА, ЗАВЕРШЕН
-# ОСТАЛОСЬ ТОЛЬКО ПРИВЯЗАТЬ БД ЧЕРЕЗ db = DataBaseClass()
-
+import asyncio
+from pathlib import Path
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, Router
 from aiogram.client.bot import DefaultBotProperties
 from aiogram.enums import ParseMode
-
 import os
+import sqlite3
+from database.db_requests import GlaucomaDB
 
-# создание бота
 load_dotenv()
-bot = Bot(os.getenv("TELEGRAM_TOKEN"),default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
-# создание диспетчера
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+if not TELEGRAM_TOKEN:
+    raise ValueError("РќРµ СѓРєР°Р·Р°РЅ TELEGRAM_TOKEN РІ .env С„Р°Р№Р»Рµ")
+
+bot = Bot(
+    token=TELEGRAM_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
+
 dp = Dispatcher()
-
-# создание главного роутера
 main_router = Router()
 
-# тут бд
+def init_database() -> GlaucomaDB:
+    db_path = Path(__file__).parent / "database" / "glaucoma.db"
+    db = GlaucomaDB(str(db_path))
+    
+    try:
+        db.conn.execute("SELECT 1")
+        print(f"Р‘Р°Р·Р° РґР°РЅРЅС‹С… СѓСЃРїРµС€РЅРѕ РїРѕРґРєР»СЋС‡РµРЅР°, РїСѓС‚СЊ Рє РЅРµР№: {db_path}")
+        return db
+    except sqlite3.Error as e:
+        raise ConnectionError(f"РћС€РёР±РєР° РїРѕРґРєР»СЋС‡РµРЅРёСЏ Рє Р‘Р”: {e}")
 
-#db = ClassName(db_file="ПУТЬ К ФАЙЛУ БД") путь к .db файлу (он должен быть не в проекте, гитом не отслеживается)
+try:
+    db = init_database()
+except Exception as e:
+    print(f"РћС€РёР±РєР° РёРЅРёС†РёР°Р»РёР·Р°С†РёРё Р‘Р”: {e}")
+    raise
+
+async def on_startup():
+    from handlers import notifications  # РРјРїРѕСЂС‚ Р·РґРµСЃСЊ, С‡С‚РѕР±С‹ РёР·Р±РµР¶Р°С‚СЊ С†РёРєР»РёС‡РµСЃРєРѕРіРѕ РёРјРїРѕСЂС‚Р°
+    asyncio.create_task(notifications.send_medication_reminders())
+    print("РЎРёСЃС‚РµРјР° СѓРІРµРґРѕРјР»РµРЅРёР№ Р·Р°РїСѓС‰РµРЅР°")
+
+user_states = {}
