@@ -10,3 +10,9 @@ obj/
 # Python cache
 __pycache__/
 *.pyc
+
+# tg protected token
+ChatBotGlaucoma/ChatBotGlaucoma/*.env
+
+# database
+ChatBotGlaucoma/ChatBotGlaucoma/database/glaucoma.db
