@@ -1,4 +1,3 @@
-# start.py
 from aiogram.types import Message, CallbackQuery
 from aiogram import F, Router
 from aiogram.filters import Command
