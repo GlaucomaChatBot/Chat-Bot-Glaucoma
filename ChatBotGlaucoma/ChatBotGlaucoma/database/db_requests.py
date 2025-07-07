@@ -340,17 +340,24 @@ class GlaucomaDB:
     
         return result
 
-    def log_intake(self, patient_id: int, med_id: int) -> bool:
-        """Зафиксировать приём лекарства"""
+    def log_intake(self, patient_id: int, med_id: int, scheduled_time: datetime) -> bool:
+        """Зафиксировать приём лекарства с указанием времени"""
         cursor = self.conn.cursor()
-        cursor.execute(
-            """INSERT INTO medication_intake_log
-               (patient_id, medication_id, intake_time)
-               VALUES (?, ?, datetime('now'))""",
-            (patient_id, med_id)
-        )
-        self.conn.commit()
-        return cursor.rowcount > 0
+        intake_time = scheduled_time.strftime("%Y-%m-%d %H:%M:%S")
+    
+        try:
+            cursor.execute(
+                """INSERT INTO medication_intake_log
+                   (patient_id, medication_id, intake_time)
+                   VALUES (?, ?, ?)""",
+                (patient_id, med_id, intake_time)
+            )
+            self.conn.commit()
+            print(f"Успешно записан приём: patient_id={patient_id}, med_id={med_id}, time={intake_time}")
+            return True
+        except sqlite3.Error as e:
+            print(f"Ошибка при записи приёма: {e}")
+            return False
 
     def check_intake(self, patient_id: int, med_id: int) -> bool:
         """Проверить, принято ли лекарство сегодня"""
@@ -371,15 +378,15 @@ class GlaucomaDB:
     def check_specific_intake(self, patient_id: int, med_id: int, scheduled_time: datetime) -> bool:
         """Проверить, был ли подтверждён приём для конкретного времени"""
         cursor = self.conn.cursor()
-        # Расширяем окно проверки до 2 минут
-        start_time = scheduled_time - timedelta(minutes=1)
-        end_time = scheduled_time + timedelta(minutes=1)
+        # Расширяем окно проверки до 10 минут
+        start_time = scheduled_time - timedelta(minutes=5)
+        end_time = scheduled_time + timedelta(minutes=5)
     
         cursor.execute(
             """
             SELECT 1 FROM medication_intake_log
             WHERE patient_id = ? AND medication_id = ?
-            AND intake_time BETWEEN ? AND ?
+            AND datetime(intake_time) BETWEEN datetime(?) AND datetime(?)
             """,
             (
                 patient_id,
@@ -388,7 +395,9 @@ class GlaucomaDB:
                 end_time.strftime("%Y-%m-%d %H:%M:%S")
             )
         )
-        return bool(cursor.fetchone())
+        result = bool(cursor.fetchone())
+        print(f"Проверка приёма: patient_id={patient_id}, med_id={med_id}, time={scheduled_time} - {'найдено' if result else 'не найдено'}")
+        return result
 
     def log_missed_intake(self, patient_id: int, med_id: int, scheduled_time: datetime) -> bool:
         """Зафиксировать пропущенный приём лекарства"""
@@ -406,7 +415,7 @@ class GlaucomaDB:
         """Получить историю приёма лекарств"""
         cursor = self.conn.cursor()
         cursor.execute(
-            """SELECT m.name, mil.intake_time
+            """SELECT m.name, mil.intake_time 
                FROM medication_intake_log mil
                JOIN medications m ON mil.medication_id = m.medication_id
                WHERE mil.patient_id = ?
@@ -414,10 +423,13 @@ class GlaucomaDB:
                ORDER BY mil.intake_time DESC""",
             (patient_id, days)
         )
-        return [{
+        history = [{
             'medication_name': row[0],
             'intake_time': row[1]
         } for row in cursor.fetchall()]
+    
+        print(f"История приёмов для {patient_id}: {len(history)} записей")
+        return history
 
     # ===== Служебные методы =====
     def close(self):

@@ -145,48 +145,62 @@ async def notify_doctor_missed_intake(patient_id: int, med_id: int, scheduled_ti
 async def confirm_medication(callback: CallbackQuery):
     """Обработка подтверждения приёма лекарства"""
     try:
+        print(f"Получено подтверждение: {callback.data}")  # Отладочное сообщение
+        
         parts = callback.data.split("_")
         medication_id = int(parts[1])
         patient_id = callback.from_user.id
         
-        # Извлекаем scheduled_time из callback_data, если оно есть
+        # Извлекаем scheduled_time из callback_data
         scheduled_time = None
         if len(parts) > 2:
             try:
-                scheduled_time = datetime.strptime(f"{parts[2]}_{parts[3]}", "%Y%m%d_%H%M")
-            except ValueError:
-                print(f"Ошибка парсинга scheduled_time в callback_data: {callback.data}")
-
-        if db.check_intake(patient_id, medication_id):
-            await callback.message.edit_text(
-                text="❌ Это лекарство уже подтверждено на сегодня!",
-                reply_markup=None
-            )
+                # Формат: confirm_123_20230715_1530
+                date_str = parts[2]
+                time_str = parts[3]
+                scheduled_time = datetime.strptime(f"{date_str} {time_str}", "%Y%m%d %H%M")
+                print(f"Распознано время приёма: {scheduled_time}")
+            except Exception as e:
+                print(f"Ошибка парсинга времени: {e}")
+                scheduled_time = datetime.now()
         else:
-            if db.log_intake(patient_id, medication_id):
-                med = db.get_medication(medication_id)
-                if med:
-                    await callback.message.edit_text(
-                        text=f"✅ Приём лекарства '{med['name']}' подтверждён!",
-                        reply_markup=None
-                    )
-                    # Удаляем из pending_confirmations, если есть
-                    if scheduled_time:
-                        confirmation_key = f"{patient_id}_{medication_id}_{scheduled_time.strftime('%Y%m%d_%H%M')}"
-                        if confirmation_key in pending_confirmations:
-                            del pending_confirmations[confirmation_key]
-                            print(f"Подтверждение удалено из pending_confirmations: {confirmation_key}")
-                else:
-                    await callback.message.edit_text(
-                        text="❌ Лекарство не найдено. Возможно, оно было удалено.",
-                        reply_markup=None
-                    )
-            else:
+            scheduled_time = datetime.now()
+        
+        # Проверяем, не было ли уже подтверждения
+        if db.check_specific_intake(patient_id, medication_id, scheduled_time):
+            await callback.answer("❌ Вы уже подтвердили этот приём ранее!", show_alert=True)
+            return
+            
+        # Записываем приём в базу данных
+        success = db.log_intake(patient_id, medication_id, scheduled_time)
+        if success:
+            med = db.get_medication(medication_id)
+            if med:
+                # Удаляем клавиатуру и обновляем текст сообщения
                 await callback.message.edit_text(
-                    text="❌ Ошибка при подтверждении приёма. Попробуйте снова.",
+                    text=f"✅ Приём лекарства '{med['name']}' успешно подтверждён!\n"
+                         f"⏰ Время: {scheduled_time.strftime('%d.%m.%Y %H:%M')}",
                     reply_markup=None
                 )
+                
+                # Удаляем из ожидающих подтверждения
+                confirmation_key = f"{patient_id}_{medication_id}_{scheduled_time.strftime('%Y%m%d_%H%M')}"
+                if confirmation_key in pending_confirmations:
+                    del pending_confirmations[confirmation_key]
+                    print(f"Подтверждение удалено: {confirmation_key}")
+            else:
+                await callback.message.edit_text(
+                    text="❌ Лекарство не найдено! Обратитесь к врачу.",
+                    reply_markup=None
+                )
+        else:
+            await callback.message.edit_text(
+                text="❌ Ошибка при подтверждении! Попробуйте снова.",
+                reply_markup=None
+            )
+        
         await callback.answer()
     except Exception as e:
-        print(f"Ошибка в confirm_medication: {e}")
-        await callback.answer("Произошла ошибка при подтверждении.", show_alert=True)
+        import traceback
+        print(f"Критическая ошибка в confirm_medication: {e}\n{traceback.format_exc()}")
+        await callback.answer("Произошла критическая ошибка. Сообщите врачу.", show_alert=True)

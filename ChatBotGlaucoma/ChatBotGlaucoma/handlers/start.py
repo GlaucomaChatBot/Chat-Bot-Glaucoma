@@ -168,13 +168,18 @@ async def process_add_medication(message: Message):
 async def show_intake_history(message: Message):
     user_id = message.from_user.id
     history = db.get_intake_history(user_id)
+    
     if history:
-        response = "История приёмов:\n" + "\n".join([
-            f"- {h['medication_name']}: {h['intake_time']}"
-            for h in history
-        ])
+        response = "📅 История ваших приёмов:\n\n"
+        for record in history:
+            # Парсим время из базы данных
+            intake_time = datetime.strptime(record['intake_time'], "%Y-%m-%d %H:%M:%S")
+            response += f"💊 {record['medication_name']}\n"
+            response += f"⏰ {intake_time.strftime('%d.%m.%Y %H:%M')}\n"
+            response += "────────────────\n"
     else:
-        response = "История приёмов пуста."
+        response = "📭 История приёмов пуста. У вас нет записей о приёме лекарств."
+    
     await message.answer(response, reply_markup=await reply.main_menu_keyboard())
 
 @main_router.message(F.text == "Выбрать своего врача")
