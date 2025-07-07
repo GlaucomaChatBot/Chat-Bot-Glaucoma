@@ -241,6 +241,14 @@ async def delete_medication(callback: CallbackQuery):
         medication_id = int(callback.data.split("_")[2])
         user_id = callback.from_user.id
         
+        # Проверяем, принадлежит ли лекарство пользователю
+        patient_medications = db.get_patient_medications(user_id)
+        medication_ids = [med['medication_id'] for med in patient_medications]
+        
+        if medication_id not in medication_ids:
+            await callback.answer("❌ Это не ваше лекарство!", show_alert=True)
+            return
+            
         if db.delete_medication(medication_id):
             await callback.message.edit_text(
                 text="✅ Лекарство успешно удалено!",
