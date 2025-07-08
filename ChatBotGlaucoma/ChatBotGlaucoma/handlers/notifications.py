@@ -20,58 +20,99 @@ async def send_medication_reminders():
         try:
             current_time = datetime.now()
             
-            # Проверяем не чаще чем раз в 30 секунд
-            if (current_time - last_notification_check).total_seconds() < 30:
-                await asyncio.sleep(5)
+            # Увеличиваем частоту проверки для точности
+            if (current_time - last_notification_check).total_seconds() < 10:
+                await asyncio.sleep(1)
                 continue
                 
             last_notification_check = current_time
-            medications = db.get_medications_to_notify()
             
-            # Сначала очистим старые уведомления
+            # Получаем всех пациентов и их лекарства
+            all_medications = []
+            patients = db.get_all_patients()
+            
+            for patient in patients:
+                meds = db.get_patient_medications(patient['patient_id'])
+                for med in meds:
+                    med['patient_id'] = patient['patient_id']
+                    all_medications.append(med)
+            
+            # Очищаем старые уведомления
             await cleanup_old_notifications()
             
-            for med in medications:
+            # Для каждого лекарства рассчитываем точное время следующего приема
+            for med in all_medications:
                 patient_id = med['patient_id']
                 med_id = med['medication_id']
                 
-                # Используем время приема для ключа, а не текущее время
-                next_intake = med.get('next_intake')
-                if not next_intake:
-                    continue
-                    
-                notification_key = f"{patient_id}_{med_id}_{next_intake.strftime('%Y%m%d_%H%M')}"
-                
-                # Пропускаем если уведомление уже отправлено
-                if notification_key in active_notifications:
-                    continue
-                
+                # Парсим время начала приема
                 try:
-                    # Отправляем уведомление
-                    await bot.send_message(
-                        chat_id=patient_id,
-                        text=f"💊 Время принять лекарство!\n\n"
-                             f"🔸 {med['medication_name']}\n"
-                             f"⏰ Запланировано на: {next_intake.strftime('%H:%M')}\n"
-                             f"⚠️ У вас есть 30 минут для подтверждения приема",
-                        reply_markup=inline.get_confirmation_keyboard(med_id, next_intake)
-                    )
+                    start_time = datetime.strptime(med['start_time'], "%H:%M:%S").time()
+                except ValueError:
+                    print(f"Ошибка формата времени для лекарства {med['name']}")
+                    continue
+                
+                # Текущие дата и время
+                now = current_time
+                today = now.date()
+                current_time_only = now.time()
+                
+                # Рассчитываем следующее время приема
+                first_intake_today = datetime.combine(today, start_time)
+                
+                # Если текущее время меньше времени начала
+                if current_time_only < start_time:
+                    next_intake = first_intake_today
+                else:
+                    # Рассчитываем сколько интервалов прошло
+                    elapsed = now - first_intake_today
+                    intervals_passed = elapsed.total_seconds() // (med['interval_minutes'] * 60)
+                    next_intake = first_intake_today + timedelta(minutes=med['interval_minutes'] * (intervals_passed + 1))
+                
+                # Проверяем, что следующее время приема наступило или наступит в течение 10 секунд
+                time_diff = (next_intake - now).total_seconds()
+                if 0 <= time_diff < 10:  # Только если время приема наступило или наступит в ближайшие 10 секунд
+                    notification_key = f"{patient_id}_{med_id}_{next_intake.strftime('%Y%m%d_%H%M')}"
                     
-                    # Записываем факт отправки уведомления
-                    active_notifications[notification_key] = current_time
+                    # Пропускаем если уведомление уже отправлено
+                    if notification_key in active_notifications:
+                        continue
                     
-                    # Добавляем в ожидающие подтверждения
-                    pending_confirmations[notification_key] = {
-                        'patient_id': patient_id,
-                        'med_id': med_id,
-                        'notification_time': current_time,
-                        'scheduled_time': next_intake
-                    }
-                    
-                    print(f"Отправлено уведомление: {notification_key}")
-                    
-                except Exception as e:
-                    print(f"Ошибка отправки уведомления пациенту {patient_id}: {e}")
+                    try:
+                        # Ждем точного времени приема
+                        if time_diff > 0:
+                            await asyncio.sleep(time_diff)
+                        
+                        # Двойная проверка после сна
+                        current_time_after_sleep = datetime.now()
+                        if abs((next_intake - current_time_after_sleep).total_seconds()) > 30:
+                            continue
+                            
+                        # Отправляем уведомление
+                        await bot.send_message(
+                            chat_id=patient_id,
+                            text=f"💊 Время принять лекарство!\n\n"
+                                 f"🔸 {med['name']}\n"
+                                 f"⏰ Запланировано на: {next_intake.strftime('%H:%M')}\n"
+                                 f"⚠️ У вас есть 30 минут для подтверждения приема",
+                            reply_markup=inline.get_confirmation_keyboard(med_id, next_intake)
+                        )
+                        
+                        # Записываем факт отправки уведомления
+                        active_notifications[notification_key] = next_intake
+                        
+                        # Добавляем в ожидающие подтверждения
+                        pending_confirmations[notification_key] = {
+                            'patient_id': patient_id,
+                            'med_id': med_id,
+                            'notification_time': next_intake,
+                            'scheduled_time': next_intake
+                        }
+                        
+                        print(f"Отправлено уведомление в {next_intake.strftime('%H:%M:%S')}: {notification_key}")
+                        
+                    except Exception as e:
+                        print(f"Ошибка отправки уведомления пациенту {patient_id}: {e}")
             
             # Проверяем просроченные подтверждения
             await check_overdue_confirmations()
@@ -145,7 +186,7 @@ async def notify_doctor_missed_intake(patient_id: int, med_id: int, scheduled_ti
 async def confirm_medication(callback: CallbackQuery):
     """Обработка подтверждения приёма лекарства"""
     try:
-        print(f"Получено подтверждение: {callback.data}")  # Отладочное сообщение
+        print(f"Получено подтверждение: {callback.data}")
         
         parts = callback.data.split("_")
         medication_id = int(parts[1])
@@ -166,17 +207,17 @@ async def confirm_medication(callback: CallbackQuery):
         else:
             scheduled_time = datetime.now()
         
-        # Проверяем, не было ли уже подтверждения
+        # Проверяем, не было ли уже подтверждения для этого конкретного времени
         if db.check_specific_intake(patient_id, medication_id, scheduled_time):
             await callback.answer("❌ Вы уже подтвердили этот приём ранее!", show_alert=True)
             return
-            
+        
         # Записываем приём в базу данных
         success = db.log_intake(patient_id, medication_id, scheduled_time)
         if success:
             med = db.get_medication(medication_id)
             if med:
-                # Удаляем клавиатуру и обновляем текст сообщения
+                # Обновляем сообщение
                 await callback.message.edit_text(
                     text=f"✅ Приём лекарства '{med['name']}' успешно подтверждён!\n"
                          f"⏰ Время: {scheduled_time.strftime('%d.%m.%Y %H:%M')}",

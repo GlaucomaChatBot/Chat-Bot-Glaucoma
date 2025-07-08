@@ -157,6 +157,15 @@ class GlaucomaDB:
             'name': row[1]
         } for row in cursor.fetchall()]
 
+    def get_all_patients(self) -> List[Dict]:
+        """Получить список всех пациентов"""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT patient_id, name FROM patients")
+        return [{
+            'patient_id': row[0],
+            'name': row[1]
+        } for row in cursor.fetchall()]
+
     # ===== Методы для лекарств =====
     def add_medication(self, name: str, start_time: str, interval_min: int) -> int:
         """Добавить новое лекарство"""
@@ -218,13 +227,24 @@ class GlaucomaDB:
         """Удалить лекарство (каскадно удалит назначения и логи приёма)"""
         try:
             cursor = self.conn.cursor()
+            # Удаляем связанные записи из журнала приёма
+            cursor.execute(
+                "DELETE FROM medication_intake_log WHERE medication_id = ?",
+                (med_id,)
+            )
+            # Удаляем связи с пациентами
+            cursor.execute(
+                "DELETE FROM patient_has_medications WHERE medication_id = ?",
+                (med_id,)
+            )
+            # Удаляем само лекарство
             cursor.execute(
                 "DELETE FROM medications WHERE medication_id = ?",
                 (med_id,)
             )
             self.conn.commit()
             if cursor.rowcount > 0:
-                print(f"Лекарство с ID {med_id} успешно удалено")
+                print(f"Лекарство с ID {med_id} и все связанные данные успешно удалены")
                 return True
             else:
                 print(f"Лекарство с ID {med_id} не найдено")
@@ -378,10 +398,10 @@ class GlaucomaDB:
     def check_specific_intake(self, patient_id: int, med_id: int, scheduled_time: datetime) -> bool:
         """Проверить, был ли подтверждён приём для конкретного времени"""
         cursor = self.conn.cursor()
-        # Расширяем окно проверки до 10 минут
-        start_time = scheduled_time - timedelta(minutes=5)
-        end_time = scheduled_time + timedelta(minutes=5)
-    
+        # Сужаем окно проверки до 1 минуты (30 секунд в обе стороны)
+        start_time = scheduled_time - timedelta(seconds=30)
+        end_time = scheduled_time + timedelta(seconds=30)
+
         cursor.execute(
             """
             SELECT 1 FROM medication_intake_log

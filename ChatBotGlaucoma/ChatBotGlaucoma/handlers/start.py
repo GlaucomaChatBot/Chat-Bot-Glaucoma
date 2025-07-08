@@ -45,20 +45,46 @@ async def register_patient(message: Message):
     user_id = message.from_user.id
     full_name = message.from_user.full_name
     
+    # Проверяем, зарегистрирован ли уже как пациент
     if db.get_patient(user_id):
-        await message.answer("Вы уже зарегистрированы как пациент!")
+        await message.answer(
+            "Вы уже зарегистрированы как пациент!",
+            reply_markup=await reply.main_menu_keyboard()
+        )
         return
     
-    if db.add_patient(user_id, full_name):
+    # Пытаемся добавить пациента
+    if not db.add_patient(user_id, full_name):
+        await message.answer(
+            "❌ Ошибка регистрации. Попробуйте позже.",
+            reply_markup=await reply.role_selection_keyboard()
+        )
+        return
+    
+    # Получаем список врачей
+    doctors = db.get_all_doctors()
+    
+    if not doctors:
+        # Если врачей нет - сразу показываем меню пациента
+        await message.answer(
+            "✅ Вы успешно зарегистрированы!\n"
+            "⚠️ В системе пока нет врачей. Вы сможете выбрать врача позже.",
+            reply_markup=await reply.main_menu_keyboard()
+        )
+    else:
+        # Если врачи есть - предлагаем выбрать
+        keyboard = inline.get_doctor_selection_keyboard(doctors)
+        
+        # Отправляем сообщение с inline-клавиатурой выбора врача,
+        # но при этом оставляем основную reply-клавиатуру
         await message.answer(
             "✅ Вы успешно зарегистрированы!\n"
             "Теперь выберите своего врача:",
-            reply_markup=await inline.get_doctor_selection_keyboard(db.get_all_doctors())
+            reply_markup=await reply.main_menu_keyboard()  # Основное меню
         )
-    else:
         await message.answer(
-            "❌ Ошибка регистрации. Попробуйте позже.",
-            reply_markup=await reply.main_menu_keyboard()
+            "Выберите врача из списка:",
+            reply_markup=keyboard  # Inline-клавиатура с врачами
         )
 
 async def show_main_menu(message: Message):
@@ -215,6 +241,14 @@ async def delete_medication(callback: CallbackQuery):
         medication_id = int(callback.data.split("_")[2])
         user_id = callback.from_user.id
         
+        # Проверяем, принадлежит ли лекарство пользователю
+        patient_medications = db.get_patient_medications(user_id)
+        medication_ids = [med['medication_id'] for med in patient_medications]
+        
+        if medication_id not in medication_ids:
+            await callback.answer("❌ Это не ваше лекарство!", show_alert=True)
+            return
+            
         if db.delete_medication(medication_id):
             await callback.message.edit_text(
                 text="✅ Лекарство успешно удалено!",
