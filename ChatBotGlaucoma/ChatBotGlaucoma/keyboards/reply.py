@@ -25,7 +25,6 @@ async def doctor_menu_keyboard() -> ReplyKeyboardMarkup:
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="Мои пациенты")],
-            [KeyboardButton(text="Просмотреть пропуски")],
         ],
         resize_keyboard=True
     )
