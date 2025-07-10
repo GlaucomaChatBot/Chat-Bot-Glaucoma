@@ -57,7 +57,7 @@ async def send_medication_reminders():
                 today = now.date()
                 current_time_only = now.time()
                 
-                # Рассчитываем следующее время приема
+                # Рассчитываем следующее время приема (в часах)
                 first_intake_today = datetime.combine(today, start_time)
                 
                 # Если текущее время меньше времени начала
@@ -66,8 +66,8 @@ async def send_medication_reminders():
                 else:
                     # Рассчитываем сколько интервалов прошло
                     elapsed = now - first_intake_today
-                    intervals_passed = elapsed.total_seconds() // (med['interval_minutes'] * 60)
-                    next_intake = first_intake_today + timedelta(minutes=med['interval_minutes'] * (intervals_passed + 1))
+                    intervals_passed = elapsed.total_seconds() // (med['interval_hours'] * 3600)
+                    next_intake = first_intake_today + timedelta(hours=med['interval_hours'] * (intervals_passed + 1))
                 
                 # Проверяем, что следующее время приема наступило или наступит в течение 10 секунд
                 time_diff = (next_intake - now).total_seconds()
@@ -137,7 +137,7 @@ async def cleanup_old_notifications():
         del active_notifications[key]
 
 async def check_overdue_confirmations():
-    """Проверка просроченных подтверждений"""
+    """Проверка просроченных подтверждений с уведомлением врача"""
     current_time = datetime.now()
     overdue_keys = []
     
@@ -149,9 +149,22 @@ async def check_overdue_confirmations():
             
             # Проверяем, не было ли подтверждения
             if not db.check_intake(patient_id, med_id):
-                db.log_missed_intake(patient_id, med_id, confirmation['notification_time'])
-                await notify_doctor_missed_intake(patient_id, med_id, confirmation['notification_time'])
-                print(f"Прием помечен как пропущенный: {key}")
+                # Логируем пропуск и получаем данные для уведомления врача
+                notification_data = db.log_missed_intake_with_notification(
+                    patient_id, med_id, confirmation['notification_time'])
+                
+                if notification_data:
+                    try:
+                        await bot.send_message(
+                            chat_id=notification_data['doctor_id'],
+                            text=f"⚠️ Пропущен приём лекарства\n\n"
+                                 f"👤 Пациент: {notification_data['patient_name']}\n"
+                                 f"💊 Лекарство: {notification_data['medication_name']}\n"
+                                 f"⏰ Запланированное время: {notification_data['scheduled_time'].strftime('%d.%m.%Y %H:%M')}\n"
+                                 f"❌ Прием не был подтвержден в течение 30 минут"
+                        )
+                    except Exception as e:
+                        print(f"Ошибка при уведомлении врача: {e}")
             
             overdue_keys.append(key)
     
@@ -159,32 +172,9 @@ async def check_overdue_confirmations():
     for key in overdue_keys:
         del pending_confirmations[key]
 
-async def notify_doctor_missed_intake(patient_id: int, med_id: int, scheduled_time: datetime):
-    """Уведомить врача о пропущенном приеме"""
-    try:
-        doctor_id = db.get_doctor_id_by_patient(patient_id)
-        if doctor_id:
-            patient = db.get_patient(patient_id)
-            medication = db.get_medication(med_id)
-            
-            if patient and medication:
-                patient_name = patient.get('name', f'Пациент {patient_id}')
-                med_name = medication['name']
-                
-                await bot.send_message(
-                    chat_id=doctor_id,
-                    text=f"⚠️ Пропущен прием лекарства\n\n"
-                         f"👤 Пациент: {patient_name}\n"
-                         f"💊 Лекарство: {med_name}\n"
-                         f"⏰ Запланированное время: {scheduled_time.strftime('%d.%m.%Y %H:%M')}\n"
-                         f"❌ Прием не был подтвержден в течение 30 минут"
-                )
-    except Exception as e:
-        print(f"Ошибка при уведомлении врача о пропуске: {e}")
-
 @router.callback_query(F.data.startswith("confirm_"))
 async def confirm_medication(callback: CallbackQuery):
-    """Обработка подтверждения приёма лекарства"""
+    """Обработка подтверждения приёма лекарства с уведомлением врача"""
     try:
         print(f"Получено подтверждение: {callback.data}")
         
@@ -212,31 +202,39 @@ async def confirm_medication(callback: CallbackQuery):
             await callback.answer("❌ Вы уже подтвердили этот приём ранее!", show_alert=True)
             return
         
-        # Записываем приём в базу данных
-        success = db.log_intake(patient_id, medication_id, scheduled_time)
-        if success:
-            med = db.get_medication(medication_id)
-            if med:
-                # Обновляем сообщение
-                await callback.message.edit_text(
-                    text=f"✅ Приём лекарства '{med['name']}' успешно подтверждён!\n"
-                         f"⏰ Время: {scheduled_time.strftime('%d.%m.%Y %H:%M')}",
-                    reply_markup=None
+        # Записываем приём и получаем данные для уведомления врача
+        notification_data = db.log_intake_with_notification(patient_id, medication_id, scheduled_time)
+        
+        if notification_data:
+            try:
+                # Уведомляем врача
+                await bot.send_message(
+                    chat_id=notification_data['doctor_id'],
+                    text=f"✅ Пациент подтвердил приём лекарства\n\n"
+                         f"👤 Пациент: {notification_data['patient_name']}\n"
+                         f"💊 Лекарство: {notification_data['medication_name']}\n"
+                         f"⏰ Время приёма: {scheduled_time.strftime('%d.%m.%Y %H:%M')}"
                 )
-                
-                # Удаляем из ожидающих подтверждения
-                confirmation_key = f"{patient_id}_{medication_id}_{scheduled_time.strftime('%Y%m%d_%H%M')}"
-                if confirmation_key in pending_confirmations:
-                    del pending_confirmations[confirmation_key]
-                    print(f"Подтверждение удалено: {confirmation_key}")
-            else:
-                await callback.message.edit_text(
-                    text="❌ Лекарство не найдено! Обратитесь к врачу.",
-                    reply_markup=None
-                )
+            except Exception as e:
+                print(f"Ошибка при уведомлении врача: {e}")
+        
+        # Обновляем сообщение для пациента
+        med = db.get_medication(medication_id)
+        if med:
+            await callback.message.edit_text(
+                text=f"✅ Приём лекарства '{med['name']}' успешно подтверждён!\n"
+                     f"⏰ Время: {scheduled_time.strftime('%d.%m.%Y %H:%M')}",
+                reply_markup=None
+            )
+            
+            # Удаляем из ожидающих подтверждения
+            confirmation_key = f"{patient_id}_{medication_id}_{scheduled_time.strftime('%Y%m%d_%H%M')}"
+            if confirmation_key in pending_confirmations:
+                del pending_confirmations[confirmation_key]
+                print(f"Подтверждение удалено: {confirmation_key}")
         else:
             await callback.message.edit_text(
-                text="❌ Ошибка при подтверждении! Попробуйте снова.",
+                text="❌ Лекарство не найдено! Обратитесь к врачу.",
                 reply_markup=None
             )
         
