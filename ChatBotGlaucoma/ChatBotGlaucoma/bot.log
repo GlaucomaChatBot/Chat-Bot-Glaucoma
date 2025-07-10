@@ -1,0 +1,7 @@
+2025-07-10 19:53:21,446 - aiogram.dispatcher - INFO - Start polling
+2025-07-10 19:53:21,771 - aiogram.dispatcher - INFO - Run polling for bot @glaucoma_chatbot id=8199328569 - 'Glaucoma Bot'
+2025-07-10 19:53:30,271 - aiogram.event - INFO - Update id=233248809 is handled. Duration 296 ms by bot id=8199328569
+2025-07-10 19:53:37,449 - aiogram.event - INFO - Update id=233248810 is handled. Duration 92 ms by bot id=8199328569
+2025-07-10 19:57:55,531 - aiogram.dispatcher - INFO - Start polling
+2025-07-10 19:57:55,830 - aiogram.dispatcher - INFO - Run polling for bot @glaucoma_chatbot id=8199328569 - 'Glaucoma Bot'
+2025-07-10 19:58:05,395 - aiogram.event - INFO - Update id=233248811 is handled. Duration 250 ms by bot id=8199328569

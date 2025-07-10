@@ -3,12 +3,14 @@ from instance import bot, dp, main_router, on_startup
 from handlers import start, notifications
 
 async def main():
+    # Регистрируем обработчик запуска
     dp.startup.register(on_startup)
     
-    # ВАЖНО: Подключаем оба роутера
+    # Подключаем все роутеры
     dp.include_router(main_router)  # Основные команды (/start и текстовые сообщения)
     dp.include_router(notifications.router)  # Обработчики кнопок подтверждения
     
+    # Запускаем фоновую задачу для уведомлений
     asyncio.create_task(notifications.send_medication_reminders())
     
     print("Бот запущен! Система уведомлений активна.")

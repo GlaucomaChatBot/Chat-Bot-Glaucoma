@@ -23,6 +23,11 @@ async def start_handler(message: Message):
             "Добро пожаловать! Вы врач или пациент?",
             reply_markup=await reply.role_selection_keyboard()
         )
+    elif doctor:
+        await message.answer(
+            "Добро пожаловать, доктор!",
+            reply_markup=await reply.doctor_menu_keyboard()
+        )
     else:
         await show_main_menu(message)
 
@@ -34,7 +39,7 @@ async def register_doctor(message: Message):
         db.add_doctor(user_id, full_name)
         await message.answer(
             "Вы успешно зарегистрированы как врач!",
-            reply_markup=await reply.main_menu_keyboard()
+            reply_markup=await reply.doctor_menu_keyboard()
         )
     except Exception as e:
         await message.answer("Ошибка регистрации врача. Попробуйте позже.")
@@ -75,17 +80,40 @@ async def register_patient(message: Message):
         # Если врачи есть - предлагаем выбрать
         keyboard = inline.get_doctor_selection_keyboard(doctors)
         
-        # Отправляем сообщение с inline-клавиатурой выбора врача,
-        # но при этом оставляем основную reply-клавиатуру
+        # Отправляем сообщение с inline-клавиатурой выбора врача
         await message.answer(
             "✅ Вы успешно зарегистрированы!\n"
             "Теперь выберите своего врача:",
-            reply_markup=await reply.main_menu_keyboard()  # Основное меню
+            reply_markup=await reply.main_menu_keyboard()
         )
         await message.answer(
             "Выберите врача из списка:",
-            reply_markup=keyboard  # Inline-клавиатура с врачами
+            reply_markup=keyboard
         )
+
+@main_router.message(F.text == "Мои пациенты")
+async def show_doctor_patients(message: Message):
+    user_id = message.from_user.id
+    doctor = db.get_doctor(user_id)
+    
+    if not doctor:
+        await message.answer("Вы не зарегистрированы как врач!")
+        return
+    
+    patients = db.get_patients_by_doctor(user_id)
+    
+    if not patients:
+        await message.answer("У вас пока нет пациентов.")
+        return
+    
+    response = "👥 Ваши пациенты:\n\n"
+    for patient in patients:
+        patient_name = patient.get('name', f'Пациент {patient["patient_id"]}')
+        response += f"👤 {patient_name}\n"
+        response += f"ID: {patient['patient_id']}\n"
+        response += "────────────────\n"
+    
+    await message.answer(response)
 
 async def show_main_menu(message: Message):
     user_id = message.from_user.id
@@ -107,7 +135,7 @@ async def show_medications(message: Message):
     medications = db.get_patient_medications(user_id)
     if medications:
         for med in medications:
-            response = f"- {med['name']} (начало: {med['start_time']}, периодичность: {med['interval_minutes']} мин)"
+            response = f"- {med['name']} (начало: {med['start_time']}, периодичность: {med['interval_hours']} часов)"
             await message.answer(
                 response,
                 reply_markup=inline.get_medication_management_keyboard(med['medication_id'])
@@ -122,7 +150,7 @@ async def show_medications(message: Message):
 async def add_medication(message: Message):
     user_id = message.from_user.id
     await message.answer(
-        "Введите название лекарства, время начала (например, '12:00') и интервал в минутах (например, 360 для 6 часов), разделяя пробелами:\nПример: 'Ксилокт 12:00 360'",
+        "Введите название лекарства, время начала (например, '12:00') и интервал в часах (например, 6 для 6 часов), разделяя пробелами:\nПример: 'Ксилокт 12:00 6'",
         reply_markup=await reply.cancel_keyboard()
     )
     user_states[user_id] = "waiting_for_medication"
@@ -142,7 +170,7 @@ async def process_add_medication(message: Message):
         del user_states[user_id]
         parts = message.text.split()
         if len(parts) != 3:
-            await message.answer("Ошибка формата. Пример: 'Аспирин 08:00 360'",
+            await message.answer("Ошибка формата. Пример: 'Аспирин 08:00 6'",
                                reply_markup=await reply.main_menu_keyboard())
             return
 
@@ -169,7 +197,7 @@ async def process_add_medication(message: Message):
                 await message.answer(
                     f"✅ Лекарство '{name}' успешно добавлено!\n"
                     f"⏰ Первый прием в {start_time}\n"
-                    f"🔄 Повтор каждые {interval} минут",
+                    f"🔄 Повтор каждые {interval} часов",
                     reply_markup=await reply.main_menu_keyboard()
                 )
             else:
