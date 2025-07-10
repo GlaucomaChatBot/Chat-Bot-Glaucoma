@@ -72,7 +72,6 @@ class GlaucomaDB:
             self.conn.commit()
             return cursor.rowcount == 1
         except sqlite3.IntegrityError:
-            # Пациент уже существует
             return False
         except sqlite3.Error as e:
             print(f"Ошибка при добавлении пациента: {e}")
@@ -167,17 +166,17 @@ class GlaucomaDB:
         } for row in cursor.fetchall()]
 
     # ===== Методы для лекарств =====
-    def add_medication(self, name: str, start_time: str, interval_min: int) -> int:
+    def add_medication(self, name: str, start_time: str, interval_hours: int) -> int:
         """Добавить новое лекарство"""
         cursor = self.conn.cursor()
         cursor.execute(
-            """INSERT INTO medications (name, start_time, interval_minutes)
+            """INSERT INTO medications (name, start_time, interval_hours)
                VALUES (?, ?, ?)""",
-            (name, start_time, interval_min)
+            (name, start_time, interval_hours)
         )
         self.conn.commit()
         med_id = cursor.lastrowid
-        print(f"Добавлено лекарство с ID {med_id}: {name}, {start_time}, {interval_min}")
+        print(f"Добавлено лекарство с ID {med_id}: {name}, {start_time}, {interval_hours} часов")
         return med_id
 
     def get_medication(self, med_id: int) -> Optional[Dict]:
@@ -193,7 +192,7 @@ class GlaucomaDB:
                 'medication_id': row[0],
                 'name': row[1],
                 'start_time': row[2],
-                'interval_minutes': row[3]
+                'interval_hours': row[3]
             }
         return None
 
@@ -209,7 +208,7 @@ class GlaucomaDB:
             query += "start_time = ?, "
             params.append(start_time)
         if interval is not None:
-            query += "interval_minutes = ?, "
+            query += "interval_hours = ?, "
             params.append(interval)
         
         if not params:
@@ -227,28 +226,20 @@ class GlaucomaDB:
         """Удалить лекарство (каскадно удалит назначения и логи приёма)"""
         try:
             cursor = self.conn.cursor()
-            # Удаляем связанные записи из журнала приёма
             cursor.execute(
                 "DELETE FROM medication_intake_log WHERE medication_id = ?",
                 (med_id,)
             )
-            # Удаляем связи с пациентами
             cursor.execute(
                 "DELETE FROM patient_has_medications WHERE medication_id = ?",
                 (med_id,)
             )
-            # Удаляем само лекарство
             cursor.execute(
                 "DELETE FROM medications WHERE medication_id = ?",
                 (med_id,)
             )
             self.conn.commit()
-            if cursor.rowcount > 0:
-                print(f"Лекарство с ID {med_id} и все связанные данные успешно удалены")
-                return True
-            else:
-                print(f"Лекарство с ID {med_id} не найдено")
-                return False
+            return cursor.rowcount > 0
         except sqlite3.Error as e:
             print(f"Ошибка при удалении лекарства с ID {med_id}: {e}")
             self.conn.rollback()
@@ -262,7 +253,7 @@ class GlaucomaDB:
             'medication_id': row[0],
             'name': row[1],
             'start_time': row[2],
-            'interval_minutes': row[3]
+            'interval_hours': row[3]
         } for row in cursor.fetchall()]
 
     # ===== Методы для назначений =====
@@ -276,7 +267,6 @@ class GlaucomaDB:
                 (patient_id, med_id)
             )
             self.conn.commit()
-            print(f"Назначено лекарство {med_id} пациенту {patient_id}")
             return True
         except sqlite3.IntegrityError as e:
             print(f"Ошибка назначения лекарства: {e}")
@@ -306,7 +296,7 @@ class GlaucomaDB:
             'medication_id': row[0],
             'name': row[1],
             'start_time': row[2],
-            'interval_minutes': row[3]
+            'interval_hours': row[3]
         } for row in cursor.fetchall()]
 
     # ===== Методы для уведомлений и подтверждений =====
@@ -319,7 +309,7 @@ class GlaucomaDB:
         cursor.execute(
             """
             SELECT DISTINCT p.patient_id, m.medication_id, m.name, p.name as patient_name,
-                   m.start_time, m.interval_minutes
+                   m.start_time, m.interval_hours
             FROM medications m
             JOIN patient_has_medications pm ON m.medication_id = pm.medication_id
             JOIN patients p ON pm.patient_id = p.patient_id
@@ -332,26 +322,22 @@ class GlaucomaDB:
             'medication_name': row[2],
             'patient_name': row[3],
             'start_time': row[4],
-            'interval_minutes': row[5]
+            'interval_hours': row[5]
         } for row in cursor.fetchall()]
     
         result = []
         for med in medications:
             try:
                 start_time = datetime.strptime(f"{current_date} {med['start_time']}", "%Y-%m-%d %H:%M:%S")
-                interval = timedelta(minutes=med['interval_minutes'])
+                interval = timedelta(hours=med['interval_hours'])
                 now = datetime.now()
             
-                # Вычисляем время следующего приёма
                 elapsed = now - start_time
-                intervals_passed = int(elapsed.total_seconds() // (med['interval_minutes'] * 60))
+                intervals_passed = int(elapsed.total_seconds() // (med['interval_hours'] * 3600))
                 next_intake = start_time + intervals_passed * interval
             
-                # Проверяем, попадает ли текущее время в окно ±1 минута от времени приёма
                 if abs((now - next_intake).total_seconds()) <= 60:
-                    # Проверяем, не было ли подтверждения для этого времени
                     if not self.check_specific_intake(med['patient_id'], med['medication_id'], next_intake):
-                        # Добавляем время приема в результат
                         med['next_intake'] = next_intake
                         result.append(med)
             except ValueError as e:
@@ -373,11 +359,27 @@ class GlaucomaDB:
                 (patient_id, med_id, intake_time)
             )
             self.conn.commit()
-            print(f"Успешно записан приём: patient_id={patient_id}, med_id={med_id}, time={intake_time}")
             return True
         except sqlite3.Error as e:
             print(f"Ошибка при записи приёма: {e}")
             return False
+
+    def log_intake_with_notification(self, patient_id: int, med_id: int, scheduled_time: datetime) -> Optional[Dict]:
+        """Зафиксировать приём и вернуть данные для уведомления врача"""
+        if self.log_intake(patient_id, med_id, scheduled_time):
+            patient = self.get_patient(patient_id)
+            medication = self.get_medication(med_id)
+            doctor_id = self.get_doctor_id_by_patient(patient_id)
+            
+            if patient and medication and doctor_id:
+                return {
+                    'patient_name': patient.get('name', f'Пациент {patient_id}'),
+                    'medication_name': medication['name'],
+                    'intake_time': scheduled_time,
+                    'doctor_id': doctor_id,
+                    'status': 'confirmed'
+                }
+        return None
 
     def check_intake(self, patient_id: int, med_id: int) -> bool:
         """Проверить, принято ли лекарство сегодня"""
@@ -390,15 +392,11 @@ class GlaucomaDB:
             """,
             (patient_id, med_id)
         )
-        result = bool(cursor.fetchone())
-        if result:
-            print(f"Приём лекарства {med_id} для пациента {patient_id} уже подтверждён сегодня")
-        return result
+        return bool(cursor.fetchone())
 
     def check_specific_intake(self, patient_id: int, med_id: int, scheduled_time: datetime) -> bool:
         """Проверить, был ли подтверждён приём для конкретного времени"""
         cursor = self.conn.cursor()
-        # Сужаем окно проверки до 1 минуты (30 секунд в обе стороны)
         start_time = scheduled_time - timedelta(seconds=30)
         end_time = scheduled_time + timedelta(seconds=30)
 
@@ -415,9 +413,7 @@ class GlaucomaDB:
                 end_time.strftime("%Y-%m-%d %H:%M:%S")
             )
         )
-        result = bool(cursor.fetchone())
-        print(f"Проверка приёма: patient_id={patient_id}, med_id={med_id}, time={scheduled_time} - {'найдено' if result else 'не найдено'}")
-        return result
+        return bool(cursor.fetchone())
 
     def log_missed_intake(self, patient_id: int, med_id: int, scheduled_time: datetime) -> bool:
         """Зафиксировать пропущенный приём лекарства"""
@@ -431,6 +427,23 @@ class GlaucomaDB:
         self.conn.commit()
         return cursor.rowcount > 0
 
+    def log_missed_intake_with_notification(self, patient_id: int, med_id: int, scheduled_time: datetime) -> Optional[Dict]:
+        """Зафиксировать пропуск и вернуть данные для уведомления врача"""
+        if self.log_missed_intake(patient_id, med_id, scheduled_time):
+            patient = self.get_patient(patient_id)
+            medication = self.get_medication(med_id)
+            doctor_id = self.get_doctor_id_by_patient(patient_id)
+            
+            if patient and medication and doctor_id:
+                return {
+                    'patient_name': patient.get('name', f'Пациент {patient_id}'),
+                    'medication_name': medication['name'],
+                    'scheduled_time': scheduled_time,
+                    'doctor_id': doctor_id,
+                    'status': 'missed'
+                }
+        return None
+
     def get_intake_history(self, patient_id: int, days: int = 7) -> List[Dict]:
         """Получить историю приёма лекарств"""
         cursor = self.conn.cursor()
@@ -443,13 +456,10 @@ class GlaucomaDB:
                ORDER BY mil.intake_time DESC""",
             (patient_id, days)
         )
-        history = [{
+        return [{
             'medication_name': row[0],
             'intake_time': row[1]
         } for row in cursor.fetchall()]
-    
-        print(f"История приёмов для {patient_id}: {len(history)} записей")
-        return history
 
     # ===== Служебные методы =====
     def close(self):
