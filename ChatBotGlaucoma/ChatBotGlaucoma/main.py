@@ -1,6 +1,6 @@
 ﻿import asyncio
 from instance import bot, dp, main_router, on_startup
-from handlers import start, notifications
+from handlers import start, notifications, info
 
 async def main():
     # Регистрируем обработчик запуска
@@ -9,6 +9,7 @@ async def main():
     # Подключаем все роутеры
     dp.include_router(main_router)  # Основные команды (/start и текстовые сообщения)
     dp.include_router(notifications.router)  # Обработчики кнопок подтверждения
+    dp.include_router(info.router) # обработчик ответов на вопросы
     
     # Запускаем фоновую задачу для уведомлений
     asyncio.create_task(notifications.send_medication_reminders())
