@@ -67,8 +67,6 @@ info_keyboard = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="38", callback_data="info_38")],
         [InlineKeyboardButton(text="39", callback_data="info_39")],
         [InlineKeyboardButton(text="40", callback_data="info_40")],
-        [InlineKeyboardButton(text="41", callback_data="info_41")],
-        [InlineKeyboardButton(text="42", callback_data="info_42")],
        
         [InlineKeyboardButton(text="Назад", callback_data="back_to_menu")]
     ]
