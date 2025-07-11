@@ -15,7 +15,8 @@ async def main_menu_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="Мои лекарства")],
             [KeyboardButton(text="Добавить лекарство")],
             [KeyboardButton(text="История приёмов")],
-            [KeyboardButton(text="Выбрать своего врача")]
+            [KeyboardButton(text="Выбрать своего врача")],
+            [KeyboardButton(text="Ответить на интересующие меня вопросы")]
         ],
         resize_keyboard=True
     )
